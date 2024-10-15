@@ -1,0 +1,1 @@
+In Model-Perf-ROC.qmd file, Ridge,Lasso and Random Forest models are applied in order to examine the relationship between the mpg01 target variable and other features from the built in Auto dataset. The models' performances were evaluated using ROC curves and AUC scores to determine which model performed better.
