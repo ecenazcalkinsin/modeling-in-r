@@ -1,0 +1,290 @@
+---
+title: "Model Performance Evaulation"
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+#| include: false
+library(magrittr)
+library(tidyverse)
+library(ISLR2)
+library(pander)
+library(GGally)
+library(MASS)
+library(randomForest)
+library(glmnet)
+```
+
+** Creating a binary variable, mpg01, that contains a 1 if mpg contains a value above its median, and a 0 if mpg contains a value below its median. **
+
+```{r}
+Auto <- Auto %>%
+  dplyr::mutate(
+    mpg01 = factor(ifelse(mpg > median(mpg), 1, 0)),
+    origin = factor(
+      origin,
+      levels = c(1, 2, 3),
+      labels = c('American', 'European', 'Asian')
+    )
+  ) ##made the adjustments for origin as well
+```
+
+**Exploring the data graphically in order to investigate the association between mpg01 and the other features. **
+
+```{r,fig.width=12,fig.asp=1, message=FALSE, warning=FALSE}
+dplyr::select(Auto,-c(name,mpg)) %>% 
+  ggpairs(aes(col = mpg01, fill = mpg01, alpha = 0.6),
+        upper = list(combo = 'box'),
+        diag = list(discrete = wrap('barDiag', position = 'fill')),
+        lower = list(combo = 'dot_no_facet')) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+** Splitting the data into a training set and a test set.**
+
+```{r}
+set.seed(100)
+train <- sample (1:nrow(Auto), nrow(Auto)*0.75)
+Auto_train <- Auto[train,]
+Auto_test <- Auto[-train,]
+
+test_mpg01 <- Auto_test$mpg01
+```
+
+**Performing LDA on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01 **
+
+```{r}
+Auto_lda <- lda(mpg01 ~ cylinders + displacement + horsepower + weight + year, data=Auto_train)
+Auto_lda
+
+lda_class <- predict(Auto_lda,Auto_test)$class
+
+table(lda_class,test_mpg01)
+1- mean(lda_class==test_mpg01)
+```
+
+
+**Performing logistic regression on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01. **
+
+```{r}
+Auto_log <- glm(mpg01 ~ cylinders + displacement + horsepower + weight + year,data = Auto_train,family = binomial)
+
+log_probs <- predict(Auto_log , Auto_test,type = "response")
+
+log_pred <- rep(0,98)
+log_pred[log_probs>0.5] <- 1
+
+table(log_pred, test_mpg01)
+1 - mean(log_pred == test_mpg01)
+```
+So the test error is `r 1-mean(log_pred == test_mpg01)`.
+
+ROC curve for LDA:
+
+```{r}
+roc_df_lda <- Auto_train %>%  
+  dplyr::select(mpg01) %>% 
+  mutate(prob = predict(Auto_lda, type = "response")$posterior[, "1"]) %>% 
+  arrange(desc(prob)) %>% 
+  mutate(TP = cumsum(ifelse(mpg01 == "1", 1, 0)),
+         FP = cumsum(ifelse(mpg01 == "0", 1, 0)),
+         TPR = TP / sum(mpg01 == "1"),
+         FPR = FP / sum(mpg01 == "0"))
+
+roc_df_lda %>% 
+  ggplot(aes(FPR, TPR)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(lty = "dashed") +
+  labs(title = "ROC Curve for LDA",
+       x = "False Positive Rate (FPR)",
+       y = "True Positive Rate (TPR)")
+
+```
+
+ROC curve for logistic regression:
+
+```{r}
+roc_df_log <- Auto_train %>% 
+  dplyr::select(mpg01) %>% 
+  mutate(prob = predict(Auto_log, type = "response")) %>% 
+  arrange(desc(prob)) %>% 
+  mutate(TP = cumsum(ifelse(mpg01 == "1", 1, 0)),
+         FP = cumsum(ifelse(mpg01 == "0", 1, 0)),
+         TPR = TP / sum(mpg01 == "1"),
+         FPR = FP / sum(mpg01 == "0"))
+
+roc_df_log %>% 
+  ggplot(aes(FPR, TPR)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(lty = "dashed") +
+  labs(title = "ROC Curve for Logistic Regression",
+       x = "False Positive Rate (FPR)",
+       y = "True Positive Rate (TPR)")
+
+```
+
+**Also fitting - random forest - lasso logistic regression - ridge logistic regression**
+
+Fit random forest:
+
+```{r}
+Auto_train$mpg01 <- factor(ifelse(Auto_train$mpg01 == 0, 0, 1))
+
+res_rf <- randomForest(mpg01 ~ cylinders + displacement + horsepower + weight + year,data = Auto_train)
+res_rf
+```
+
+ROC curve for random forest:
+
+```{r}
+roc_df_rf <- Auto_train %>% 
+  dplyr::select(mpg01) %>% 
+  mutate(prob = predict(res_rf, type = "response")) %>% 
+  arrange(desc(prob)) %>% 
+  mutate(TP = cumsum(ifelse(mpg01 == "1", 1, 0)),
+         FP = cumsum(ifelse(mpg01 == "0", 1, 0)),
+         TPR = TP / sum(mpg01 == "1"),
+         FPR = FP / sum(mpg01 == "0"))
+
+
+roc_df_rf %>% 
+  ggplot(aes(FPR, TPR)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(lty = "dashed") +
+  labs(title = "ROC Curve for Random Forest Model",
+       x = "False Positive Rate (FPR)",
+       y = "True Positive Rate (TPR)")
+```
+
+Fit lasso logistic regression:
+
+```{r}
+x <- model.matrix(mpg01 ~ cylinders + displacement + horsepower + weight + year, data = Auto_train)
+y <- as.numeric(Auto_train$mpg01) - 1
+
+lasso_model <- cv.glmnet(x, y, alpha = 1, family = "binomial")
+lasso_pred_probs <- predict(lasso_model, newx = model.matrix(mpg01 ~ cylinders + displacement + horsepower + weight + year, data = Auto_test), s = "lambda.min", type = "response")
+lasso_pred <- ifelse(lasso_pred_probs > 0.5, 1, 0)
+
+table(lasso_pred, test_mpg01)
+1-mean(lasso_pred == test_mpg01)
+```
+
+The test error is 0.09183673 for lasso logistic regression.
+
+ROC curve for lasso logistic regression:
+
+```{r}
+roc_df_lasso <- Auto %>% 
+  dplyr::select(mpg01, cylinders, displacement, horsepower, weight, year) %>% 
+  mutate(prob = predict(lasso_model, type = "response", newx = as.matrix(.))) %>% 
+  arrange(desc(prob)) %>% 
+  mutate(TP = cumsum(ifelse(mpg01 == "1", 1, 0)),
+         FP = cumsum(ifelse(mpg01 == "0", 1, 0)),
+         TPR = TP / sum(mpg01 == "1"),
+         FPR = FP / sum(mpg01 == "0"))
+
+roc_df_lasso %>% 
+  ggplot(aes(FPR, TPR)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(lty = "dashed") +
+  labs(title = "ROC Curve for Lasso Logistic Regression",
+       x = "False Positive Rate (FPR)",
+       y = "True Positive Rate (TPR)")
+```
+
+
+Fit ridge logistic regression:
+
+```{r}
+ridge_model <- cv.glmnet(x, y, alpha = 0, family = "binomial")
+
+ridge_pred_probs <- predict(ridge_model, newx = model.matrix(mpg01 ~ cylinders + displacement + horsepower + weight + year, data = Auto_test), s = "lambda.min", type = "response")
+ridge_pred <- ifelse(ridge_pred_probs > 0.5, 1, 0)
+
+table(ridge_pred, test_mpg01)
+1- mean(ridge_pred == test_mpg01)
+```
+
+The test error is 0.07142857 for ridge logistic regression.
+
+
+ROC curve for ridge logistic regression:
+
+```{r}
+roc_df_ridge <- Auto %>% 
+  dplyr::select(mpg01, cylinders, displacement, horsepower, weight, year) %>% 
+  mutate(prob = predict(ridge_model, type = "response", newx = as.matrix(.))) %>% 
+  arrange(desc(prob)) %>% 
+  mutate(TP = cumsum(ifelse(mpg01 == "1", 1, 0)),
+         FP = cumsum(ifelse(mpg01 == "0", 1, 0)),
+         TPR = TP / sum(mpg01 == "1"),
+         FPR = FP / sum(mpg01 == "0"))
+
+roc_df_ridge %>% 
+  ggplot(aes(FPR, TPR)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(lty = "dashed") +
+  labs(title = "ROC Curve for Ridge Logistic Regression",
+       x = "False Positive Rate (FPR)",
+       y = "True Positive Rate (TPR)")
+```
+
+**Plot ROC curves on the same coordinate system. - Calculate AUC. - Which model would you pick? Why?**
+
+ROC curves on the same coordinate system:
+
+```{r}
+set.seed(1)
+roc_df_rf <- roc_df_rf %>% distinct(FPR, .keep_all = TRUE)
+roc_logis_rf <- approxfun(roc_df_rf$FPR, roc_df_rf$TPR)
+
+roc_df_lasso <- roc_df_lasso %>% distinct(FPR, .keep_all = TRUE)
+roc_logis_lasso <- approxfun(roc_df_lasso$FPR, roc_df_lasso$TPR)
+
+roc_df_ridge <- roc_df_ridge %>% distinct(FPR, .keep_all = TRUE)
+roc_logis_ridge <- approxfun(roc_df_ridge$FPR, roc_df_ridge$TPR)
+
+roc_df_log <- roc_df_log %>% distinct(FPR, .keep_all = TRUE)
+roc_logis_log <- approxfun(roc_df_log$FPR, roc_df_log$TPR)
+
+roc_df_lda <- roc_df_lda %>% distinct(FPR, .keep_all = TRUE)
+roc_logis_lda<- approxfun(roc_df_lda$FPR, roc_df_lda$TPR)
+```
+
+
+```{r}
+ggplot(data = tibble(x=c(0, 1)), aes(x)) +
+  stat_function(fun = roc_logis_rf, aes(col = "random forest")) +
+  stat_function(fun = roc_logis_lasso, aes(col = "lasso")) +
+  stat_function(fun = roc_logis_ridge, aes(col = "ridge")) +
+  stat_function(fun = roc_logis_log, aes(col = "logistic regression")) +
+  stat_function(fun = roc_logis_lda, aes(col = "lda")) +
+  labs(col = "model", x = "FPR", y = "TPR") +
+  geom_abline(lty = "dashed", col = "gray")
+```
+
+AUC values:
+
+```{r}
+integrate(roc_logis_log, 0, 1)$value 
+integrate(roc_logis_rf, 0, 1)$value 
+integrate(roc_logis_ridge, 0, 1)$value 
+integrate(roc_logis_lasso, 0, 1)$value 
+integrate(roc_logis_lda, 0, 1)$value 
+```
+The values are respectively for logistic regression, random forest, ridge regression,lasso regression and LDA model.
+
+Would pick lasso regression model as it has the highest AUC value overall.
+
+
+
+
+
