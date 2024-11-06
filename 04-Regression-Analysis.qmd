@@ -1,5 +1,5 @@
 ---
-title: "Homework04"
+title: "Regression Analysis"
 format: html
 editor: visual
 ---
@@ -13,41 +13,34 @@ library(ggplot2)
 
 ```
 
-## Ece Naz Çalkınsın 22003342 HW4
 
-a\) Fit a multiple regression model to predict Sales using Price, Urban, and US.
+Fitting a multiple regression model to predict Sales using Price, Urban, and US.
 
 ```{r}
 reg_model <- lm(formula = Sales ~ Price + Urban + US, data = Carseats)
 ```
 
-b\) Provide an interpretation of each coefficient in the model.
+Interpretation of each coefficient in the model.
 
 ```{r}
 summary(reg_model)
 ```
 
 As p-value for price is smaller than 0.05, it affects sales. They have negative relation as expected.
-
 Urban is not significant for sales because of the p-value. It is nearly 1. Hence, there is no strong relation between urban stores and sales.
-
 For US, it is also significant since p-value is less than 0.05. US and sales have a positive relation with each other. If there is a store in US, the sales is also increased.
 
-c\) Write out the model in equation form, being careful to handle the qualitative variables properly.
+Model in equation form
 
 $$ Sales = 13.043469 - 0.054459 * Price -0.021916 * Urban + 1.200573 * US + \epsilon $$
 
-d\) For which of the predictors can you reject the null hypothesis H\_{0}:β\_{j} = 0 ?
 
-When the p-value is smaller than 0.05, this means that we can reject the null hypothesis. This suggests that a real effect or relationship exists between the predictor and the response variables. Hence, in this case, for US and price we can reject the null hypothesis.
 
-e\) On the basis of your response to the previous question, fit a smaller model that only uses the predictors for which there is evidence of association with the outcome.
+Fitting a smaller model that only uses the predictors for which there is evidence of association with the outcome.
 
 ```{r}
 smaller_model <- lm(formula = Sales ~ US + Price, data = Carseats)
 ```
-
-f\) How well do the models in (a) and (e) fit the data?
 
 ```{r}
 summary(smaller_model)
@@ -55,24 +48,17 @@ summary(smaller_model)
 
 For testing how well the model fits to the data, we should firstly look at the Adjusted R-squared results. The one with higher Adjusted R-squared result indicates a better fit. So, the smaller model has a higher value and it is a better fit. However, since the difference is so small, we can also look at other indicators like RSE. When RSE is low, it means the model is a better fit. Smaller model has a smaller value of RSE, so it is a better fit compared to original model.
 
-g\) Using the model from (e), obtain 95% confidence intervals for the coefficient(s).
+Obtaining 95% confidence intervals for the coefficient(s).
 
 ```{r}
 confint(smaller_model, level = 0.95)
 ```
 
-h\) Is there evidence of outliers or high leverage observations in the model from (e)?
-
 ```{r}
 residuals <- residuals(smaller_model)
 boxplot(residuals)
 ```
-
 By creating a boxplot for smaller model, it is clearly seen that there are a few outliers in the graph. This boxplot is the evidence.
-
-This problem involves the Boston data set, which we saw in the lab for this chapter. We will now try to predict per capita crime rate using the other variables in this data set. In other words, per capita crime rate is the response, and the other variables are the predictors.
-
-a)  For each predictor, fit a simple linear regression model to predict the response. Describe your results. In which of the models is there a statistically significant association between the predictor and the response? Create some plots to back up your assertions.
 
 **Crim-zn**
 
@@ -121,7 +107,6 @@ rm_model <- lm(formula = crim ~ rm, data = Boston)
 summary(rm_model)
 plot(rm_model)
 ```
-
 There is a negative relation between crim and rm because of the low p-value and negative coefficient.
 
 **Crim-age**
@@ -191,10 +176,9 @@ medv_model <- lm(formula = crim ~ medv, data = Boston)
 summary(medv_model)
 plot(medv_model)
 ```
-
 There a statistically significant association between medv and the response variable crim as p-value is smaller than 0.05. They have a negative correlation as coefficient is smaller than zero. In the Residuals vs Fitted graph, a downward trend as the fitted values increase, suggests a negative relationship which backs up my assertions.
 
-b\) Fit a multiple regression model to predict the response using all of the predictors. Describe your results. For which predictors can we reject the null hypothesis $$H_{0}:β_{j} = 0 $$?
+Fitting a multiple regression model to predict the response using all of the predictors. 
 
 ```{r}
 mult_model <- lm(crim ~.,data = Boston)
@@ -202,8 +186,6 @@ summary(mult_model)
 ```
 
 When the p-value is smaller than the chosen significance level (0.05), it indicates that the observed data provides enough evidence to reject the null hypothesis. Hence, zn, dis,rad and medv we can reject the null hypothesis.
-
-c\) How do your results from (a) compare to your results from (b) ? Create a plot displaying the univariate regression coefficients from (a) on the x-axis, and the multiple regression coefficients from (b) on the y-axis. That is, each predictor is displayed as a single point on the plot. Its coefficient in a simple linear regression model is shown on the x-axis, and its coefficient estimate in the multiple linear regression model is shown on the y-axis.
 
 ```{r}
 
@@ -219,9 +201,6 @@ ggplot(comparison, aes(x = Simple_Coefficients, y = Multiple_Coefficients)) +
   geom_point(color="blue") 
   
 ```
-
-d\) Is there evidence of non-linear association between any of the predictors and the response? To answer this question, for each predictor X, fit a model of the form.
-
 $$Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \beta_3 X^3+\epsilon $$
 
 ```{r}
